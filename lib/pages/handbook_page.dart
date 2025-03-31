@@ -43,6 +43,11 @@ class _HandbookPageState extends State<HandbookPage> {
   }
 
   Future<void> fetchServiceHistory() async {
+    setState(() {
+      isLoading = true; // optional: loading anzeigen beim Refresh
+      errorMessage = '';
+    });
+
     final url =
         'https://it200287.cloud.htl-leonding.ac.at/api/maintenance/getBikeserviceHistory/fin/$fin';
 
@@ -61,7 +66,7 @@ class _HandbookPageState extends State<HandbookPage> {
 
           List<dynamic> historyList = jsonResponse['getByFinDTOList'];
 
-          // ✅ Sort by serviceDate DESCENDING (newest first)
+          // Sort descending by date
           historyList.sort((a, b) {
             DateTime dateA = DateTime.tryParse(a['serviceDate'] ?? '') ?? DateTime(1970);
             DateTime dateB = DateTime.tryParse(b['serviceDate'] ?? '') ?? DateTime(1970);
@@ -77,18 +82,21 @@ class _HandbookPageState extends State<HandbookPage> {
           setState(() {
             errorMessage = 'Fehler: Unerwartete Datenstruktur';
             isLoading = false;
+            serviceHistoryList = [];
           });
         }
       } else {
         setState(() {
-          errorMessage = 'Fehler beim Laden: ${response.statusCode}';
+          errorMessage = 'Noch keine Services eingetragen';
           isLoading = false;
+          serviceHistoryList = [];
         });
       }
     } catch (e) {
       setState(() {
         errorMessage = 'Ein Fehler ist aufgetreten: $e';
         isLoading = false;
+        serviceHistoryList = [];
       });
     }
   }
@@ -98,25 +106,48 @@ class _HandbookPageState extends State<HandbookPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(bikeName.isNotEmpty ? bikeName : 'Handbuch'),
+        automaticallyImplyLeading: false
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage.isNotEmpty
-          ? Center(
-        child: Text(
-          errorMessage,
-          style: const TextStyle(color: Colors.red),
-        ),
-      )
-          : serviceHistoryList.isEmpty
-          ? const Center(
-        child: Text('Keine Service-Historie gefunden.'),
-      )
-          : RefreshIndicator(
-        onRefresh: () async {
-          await fetchServiceHistory();
-        },
-        child: Padding(
+      body: RefreshIndicator(
+        onRefresh: fetchServiceHistory,
+        child: isLoading
+            ? ListView(
+          // Dummy list to enable pull-to-refresh while loading
+          children: const [
+            SizedBox(
+              height: 400,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ],
+        )
+            : errorMessage.isNotEmpty
+            ? ListView(
+          // Dummy list to enable pull-to-refresh while error
+          children: [
+            SizedBox(
+              height: 400,
+              child: Center(
+                child: Text(
+                  errorMessage,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            ),
+          ],
+        )
+            : serviceHistoryList.isEmpty
+            ? ListView(
+          // Dummy list to enable pull-to-refresh while no data
+          children: const [
+            SizedBox(
+              height: 400,
+              child: Center(
+                child: Text('Keine Service-Historie gefunden.'),
+              ),
+            ),
+          ],
+        )
+            : Padding(
           padding: const EdgeInsets.all(16.0),
           child: ListView.builder(
             itemCount: serviceHistoryList.length,
@@ -128,6 +159,7 @@ class _HandbookPageState extends State<HandbookPage> {
                   ? DateFormat('dd-MM-yy')
                   .format(DateTime.parse(rawDate))
                   : 'Kein Datum';
+              String serviceType = service['serviceType'] ?? '';
 
               return Card(
                 elevation: 4,
@@ -169,6 +201,10 @@ class _HandbookPageState extends State<HandbookPage> {
                             const SizedBox(height: 4),
                             Text(
                               'Erstellt am: ${service['createdAt'] ?? 'Unbekannt'}',
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Erstellt von: ${service['serviceType'] ?? 'Unbekannt'}',
                             ),
                           ],
                         ),
